@@ -45,7 +45,7 @@ class ChimeraCommandManager:
         self(command)
     
     def load_protein(self, file_path):
-        assert file_path.endswith(".pdb")
+        assert file_path.endswith(".pdb") or file_path.endswith(".cif")
         index = self.get_index()
         self(f"open {file_path}")
         protein = Protein(self, index)
@@ -59,6 +59,9 @@ class ChimeraCommandManager:
     
     def silhouettes(self):
         self("graphics silhouettes true")
+    
+    def show_side_view(self):
+        self.c('ui tool show "Side View"')
     
     def save_image(self,save_path:str, targets=None,transparent_background=True):
         command = "save "
@@ -118,6 +121,10 @@ class Protein(ChimeraObject):
     def fix_residue_indexing(self):
         self.c(f"renumber #{self.index}")
     
+    def add_terminal_atoms(self):
+        self.c(f"addh #{self.index}")
+        self.c(f"delete #{self.index}@H*")
+    
     def fix_missing_sidechains(self):
         command = f"dockprep #{self.index} ah false ac false "
         self.c(command)
@@ -126,6 +133,9 @@ class Protein(ChimeraObject):
         self.c(f"split #{self.index} atoms :{residue_range[0]}-{residue_range[1]} atoms :{residue_range[1]}-")
         self.c(f"combine #{self.index}.1")
         return Protein(self.c, self.c.get_index())
+
+    def align(self, other):
+        self.c(f"match #{self.index} to #{other.index}")
     
     def save(self, path):
         command = f"save {path} #{self.index}"
