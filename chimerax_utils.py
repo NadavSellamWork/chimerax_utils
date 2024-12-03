@@ -130,7 +130,7 @@ class Protein(ChimeraObject):
         self.c(command)
     
     def slice_residues(self, residue_range):
-        self.c(f"split #{self.index} atoms :{residue_range[0]}-{residue_range[1]} atoms :{residue_range[1]}-")
+        self.c(f"split #{self.index} atoms :{residue_range[0]}-{residue_range[1]}")
         self.c(f"combine #{self.index}.1")
         return Protein(self.c, self.c.get_index())
 
