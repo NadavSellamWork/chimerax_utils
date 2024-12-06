@@ -51,6 +51,18 @@ class ChimeraCommandManager:
         protein = Protein(self, index)
         return protein
     
+    def load_protein_folder(self, folder_path):
+        """
+            this function will load all the proteins in the folder and align them all to the first one
+            returns a list of the proteins
+        """
+        folder_files = os.listdir(folder_path)
+        protein_files = [file for file in folder_files if file.endswith(".pdb") or file.endswith(".cif")]
+        proteins = [self.load_protein(os.path.join(folder_path, file)) for file in protein_files]
+        for p in proteins[1:]:
+            p.align(proteins[0])
+        return proteins
+    
     def load_density(self, file_path):
         assert file_path.endswith(".ccp4") or file_path.endswith(".map")
         index = self.get_index()
