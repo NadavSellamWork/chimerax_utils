@@ -58,6 +58,7 @@ class ChimeraCommandManager:
         """
         folder_files = os.listdir(folder_path)
         protein_files = [file for file in folder_files if file.endswith(".pdb") or file.endswith(".cif")]
+        protein_files = sorted(protein_files)
         proteins = [self.load_protein(os.path.join(folder_path, file)) for file in protein_files]
         for p in proteins[1:]:
             p.align(proteins[0])
