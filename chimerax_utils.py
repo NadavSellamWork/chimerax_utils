@@ -17,7 +17,6 @@ body = (
     "------WebKitFormBoundary57TtBhHy2dVJKw3H--\r\n"
 )
 
-
 class ChimeraCommandManager:
     def __init__(self, chimera_port=PORT):
         self.chimera_url = f"http://127.0.0.1:{chimera_port}/run"
@@ -25,7 +24,8 @@ class ChimeraCommandManager:
     
     def __call__(self, command):
         new_body = body.replace("COMMAND", command + "\r\n")
-        requests.post(self.chimera_url, headers=headers, data=new_body)
+        output = requests.post(self.chimera_url, headers=headers, data=new_body)
+        return output.json()
     
     def get_index(self):
         return_value = self.index
@@ -64,6 +64,17 @@ class ChimeraCommandManager:
             p.align(proteins[0])
         return proteins
     
+    def load_and_fix_protein(self, protein_path):
+        """
+            this function will load a protein, fix side chains, add terminal atoms and save that protein to the same path.
+            the function will return the protein object after correction
+        """
+        p = self.load_protein(protein_path)
+        p.fix_missing_sidechains()
+        p.add_terminal_atoms()
+        p.save(protein_path)
+        return p
+
     def load_density(self, file_path):
         assert file_path.endswith(".ccp4") or file_path.endswith(".map")
         index = self.get_index()
@@ -139,7 +150,7 @@ class Protein(ChimeraObject):
         self.c(f"delete #{self.index}@H*")
     
     def fix_missing_sidechains(self):
-        command = f"dockprep #{self.index} ah false ac false "
+        command = f"dockprep #{self.index} ah false ac false delAltLocs false"
         self.c(command)
     
     def slice_residues(self, residue_range):
@@ -153,6 +164,11 @@ class Protein(ChimeraObject):
     def save(self, path):
         command = f"save {path} #{self.index}"
         self.c(command)
+    
+    def atom_count(self):
+        output = self.c(f"info #{self.index}")["json values"][0]
+        d = json.loads(output)[0]
+        return d["num atoms"]
 
 class Density(ChimeraObject):    
     def hide(self):
