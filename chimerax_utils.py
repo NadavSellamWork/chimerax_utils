@@ -2,6 +2,7 @@ import os
 import json
 import requests
 import json
+from typing import List, Union
 import time
 
 PORT = 8889
@@ -94,7 +95,7 @@ class ChimeraCommandManager:
         command = command + save_path + " "
         if transparent_background:
             command = command + "transparentBackground true"
-        self(command)
+        self(command)    
         
 class ChimeraObject:
     def __init__(self, c:ChimeraCommandManager, index: int):
@@ -204,3 +205,28 @@ class Density(ChimeraObject):
         new_density.level_set(level_set)
         return new_density
     
+class ProteinSequenceMovie:
+    def __init__(self, proteins: List[Protein], color="#4c37d7ff"):
+        self.proteins = proteins
+        for protein in self.proteins:
+            protein.color(color)
+            protein.hide()
+    
+    def play(self,start_index=0, end_index=None, show_atoms=False, show_backbone=False, delay=0):
+        if end_index is not None:
+            proteins = self.proteins[start_index:end_index]
+        else:
+            proteins = self.proteins[start_index:]
+        current_protein: Union[None, Protein] = None
+        for protein in proteins:
+            if show_atoms:
+                protein.show_atoms(backbone=show_backbone)
+            else:
+                protein.show_cartoon()
+                
+            if current_protein is not None:
+                current_protein.hide()
+
+            current_protein = protein
+
+            time.sleep(delay)
