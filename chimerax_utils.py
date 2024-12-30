@@ -134,7 +134,45 @@ class ChimeraCommandManager:
             this folder will have subfolders which are ordered in the frame order
             each subfolder will contains the same filenames 
             each subfolder will represent a state, made from atomic models and density maps
-            this function will return the protein structure series and density series that corespond to the time series
+
+            returns:
+                - protein_series_objects - a list of protein_series objects
+                - protein_series_names - a list of the same length, with the corepsonding files names of the protein series (from which files the protein series were created)
+                - density_series_objects - a list of density series objects
+                - density_series_namesa - list of the same length, with the corepsonding files names of the density series (from which files the density series were created)
+                _ scene play function - a function to play and control the entire scene all together
+
+            the scene play function will accept a start and end index, and a pause frames argument, and will play the entire scene together 
+            according to these arguments
+            the scene play function has the function signature of: play_scene_function(start=1,end=-1, pause_frames=10)
+
+            an example of the folder sturcture that this function will accept: 
+            - input_folder_path
+                - frame_0
+                    - protein_1.cif
+                    - protein_2.pdb
+                    - density_1.ccp4
+                    - density_2.map
+                - frame_1
+                    - protein_1.cif
+                    - protein_2.pdb
+                    - density_1.ccp4
+                    - density_2.map
+                - frame_2
+                    - protein_1.cif
+                    - protein_2.pdb
+                    - density_1.ccp4
+                    - density_2.map
+
+                .
+                .
+                .
+
+                - frame_100
+                    - protein_1.cif
+                    - protein_2.pdb
+                    - density_1.ccp4
+                    - density_2.map
         """
         def numeric_key_function(name):
             """
