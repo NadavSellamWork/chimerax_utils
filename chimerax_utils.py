@@ -2,11 +2,12 @@ import os
 import json
 import requests
 import json
-from typing import List, Union
-import time
+from typing import List, Optional
+import random
+from contextlib import contextmanager
+import shutil
 
-PORT = 8889
-print(f'Please run <chimerax --cmd "remotecontrol rest start port {PORT} json true"> in your command line')
+
 headers = {
     "content-type": "multipart/form-data; boundary=----WebKitFormBoundary57TtBhHy2dVJKw3H",
 }
@@ -19,7 +20,8 @@ body = (
 )
 
 class ChimeraCommandManager:
-    def __init__(self, chimera_port=PORT):
+    def __init__(self, chimera_port=8889):
+        print(f'Please run <chimerax --cmd "remotecontrol rest start port {chimera_port} json true"> in your command line')
         self.chimera_url = f"http://127.0.0.1:{chimera_port}/run"
         self.index = 1 
     
@@ -27,6 +29,22 @@ class ChimeraCommandManager:
         new_body = body.replace("COMMAND", command + "\r\n")
         output = requests.post(self.chimera_url, headers=headers, data=new_body)
         return output.json()
+    
+    @contextmanager
+    def command_dump(self):
+        """
+            this context manager makes all the commands that are given within it to run as a single commmand
+            where the sub commands are seperated by a semicolon
+        """
+        command_queue = []
+        old_command_function = self.__call__
+        self.__call__ = lambda command: command_queue.append(command)
+        try:
+            yield None
+        finally:
+            self.__call__ = old_command_function
+            command = ";".join(command_queue)
+            self(command)
     
     def get_index(self):
         return_value = self.index
@@ -98,7 +116,73 @@ class ChimeraCommandManager:
         command = command + save_path + " "
         if transparent_background:
             command = command + "transparentBackground true"
-        self(command)    
+        self(command)
+
+    def create_protein_structure_series(self, proteins):
+        index = self.get_index()
+        proteins_morph = ProteinStructureMorph(self, index, proteins)
+        return proteins_morph
+    
+    def create_density_series(self, densities=None,density_files=None):
+        index = self.get_index()
+        proteins_morph = DensityMapSeries(self, index, densities,density_files)
+        return proteins_morph
+    
+    def load_time_series_folder(self, folder_path, align_proteins_to=None):
+        """
+            this function will accept the path of a folder which contains a time series
+            this folder will have subfolders which are ordered in the frame order
+            each subfolder will contains the same filenames 
+            each subfolder will represent a state, made from atomic models and density maps
+            this function will return the protein structure series and density series that corespond to the time series
+        """
+        def numeric_key_function(name):
+            """
+                this function will be used when sorting file names, to order them based on the numbers that the basename contains
+            """
+            return int("".join(char for char in os.path.basename(name) if char.isnumeric()))
+        subfolders = sorted(os.listdir(folder_path), key=numeric_key_function)
+        subfolders = [os.path.join(folder_path, sub_folder) for sub_folder in subfolders]
+        folder_files = set(os.listdir(subfolders[0]))
+        for sub_folder in subfolders[1:]:
+            if not set(os.listdir(sub_folder)) == folder_files:
+                raise NameError(f"folder {sub_folder} had a different content compared to {subfolders[0]}")
+        trajectory_files = {file_name: [] for file_name in folder_files}
+        for sub_folder in subfolders:
+            for file in folder_files:
+                trajectory_files[file].append(os.path.join(sub_folder, file))
+        protein_trajectories = []
+        protein_trajectories_names = []
+        density_trajectories = []
+        density_trajectory_names = []
+        
+        if align_proteins_to is not None:
+            protein_to_align_to = self.load_protein(align_proteins_to)
+
+        for file in folder_files:
+            trajectory = trajectory_files[file]
+            if file.endswith(".pdb") or file.endswith(".cif"):
+                protein_trajectories_names.append(file)
+                proteins = [self.load_protein(trajectory_file) for trajectory_file in trajectory]
+                if align_proteins_to is not None:
+                    for protein in proteins:
+                        protein.align(protein_to_align_to)
+                protein_series = self.create_protein_structure_series(proteins)
+                protein_trajectories.append(protein_series)
+            else:
+                density_trajectory_names.append(file)
+                density_series = self.create_density_series(density_files=trajectory)
+                density_series.transparency(0.5)
+                density_trajectories.append(density_series)
+        protein_to_align_to.hide()
+
+        def play_scene_function(start=1,end=-1, pause_frames=10):
+            with self.command_dump():
+                for protein_trajectory in protein_trajectories:
+                    protein_trajectory.play_section(start, end, pause_frames)
+                for density_trajectory in density_trajectories:
+                    density_trajectory.play_section(start, end, pause_frames)
+        return protein_trajectories, protein_trajectories_names, density_trajectories, density_trajectory_names, play_scene_function
         
 class ChimeraObject:
     def __init__(self, c:ChimeraCommandManager, index: int):
@@ -110,12 +194,16 @@ class ChimeraObject:
 
 class Protein(ChimeraObject):
     def hide(self, residue_range=None):
+        # if residue_range is not None:
+        #     self.c(f"hide #{self.index}:{residue_range[0]}-{residue_range[1]} atoms")
+        #     self.c(f"hide #{self.index}:{residue_range[0]}-{residue_range[1]} cartoon")
+        # else:
+        #     self.c(f"hide #{self.index} atoms")
+        #     self.c(f"hide #{self.index} cartoon")
         if residue_range is not None:
-            self.c(f"hide #{self.index}:{residue_range[0]}-{residue_range[1]} atoms")
-            self.c(f"hide #{self.index}:{residue_range[0]}-{residue_range[1]} cartoon")
+            self.c(f"hide #{self.index}:{residue_range[0]}-{residue_range[1]} models")
         else:
-            self.c(f"hide #{self.index} atoms")
-            self.c(f"hide #{self.index} cartoon")
+            self.c(f"hide #{self.index} models")
     
     def show_atoms(self, residue_range=None, backbone=None):
         command = f"show #{self.index}"
@@ -207,29 +295,76 @@ class Density(ChimeraObject):
         new_density = Density(self.c, self.c.get_index())
         new_density.level_set(level_set)
         return new_density
+
+
+class ProteinStructureMorph(Protein):
+    def __init__(self, c:ChimeraCommandManager, index: int, proteins: List[Protein]):
+        super().__init__(c, index)
+        command = "morph " + " ".join([f"#{protein.index}" for protein in proteins]) + f" frames 1"
+        self.c(command)
+        self.length = len(proteins)
     
-class ProteinSequenceMovie:
-    def __init__(self, proteins: List[Protein], color="#4c37d7ff"):
-        self.proteins = proteins
-        for protein in self.proteins:
-            protein.color(color)
-            protein.hide()
+    def set_frame(self, frame_index: int):
+        command = f"coordset #{self.index} {frame_index}"
+        self.c(command)
     
-    def play(self,start_index=0, end_index=None, show_atoms=False, show_backbone=False, delay=0):
-        if end_index is not None:
-            proteins = self.proteins[start_index:end_index]
+    def play_section(self, start=1,end=-1, pause_frames=10):
+        command = f"coordset #{self.index} {start}"
+        if end:
+            command += f",{end}"
+        if pause_frames is not None and pause_frames > 0:
+            command += f" pauseFrames {pause_frames}"
+        self.c(command)
+    
+    def __len__(self):
+        return self.length
+
+class DensityMapSeries(Density):
+    def __init__(self, c:ChimeraCommandManager, index: int, densities: Optional[List[Density]],density_files:Optional[List[str]]):
+        # make sure that only one of them is not None
+        assert ((densities and density_files) is None) and ((densities or density_files) is not None)
+        super().__init__(c, index)
+        random_number = random.random()
+        if densities is not None:
+            self.save_path = os.path.abspath(f"/tmp/temp_{random_number:.6f}")
+            os.makedirs(self.save_path)
+            # for a very stupid reason, chimerax cannot create a vseries from existing volumes, and they must be loaded using the open command
+            save_command = f"save {os.path.join(self.save_path, '%d.ccp4')} models #{','.join([str(density.index) for density in densities])}"
+            self.c(save_command)
+            file_paths = [os.path.join(self.save_path, file_name) for file_name in os.listdir(self.save_path)]
+            file_paths = sorted(file_paths, key=lambda file_path: int(os.path.basename(file_path).split(".")[0]))
+            open_command = f'open {" ".join(file_paths)} vseries true'
+            self.c(open_command)
+            self.length = len(densities)
         else:
-            proteins = self.proteins[start_index:]
-        current_protein: Union[None, Protein] = None
-        for protein in proteins:
-            if show_atoms:
-                protein.show_atoms(backbone=show_backbone)
-            else:
-                protein.show_cartoon()
-                
-            if current_protein is not None:
-                current_protein.hide()
-
-            current_protein = protein
-
-            time.sleep(delay)
+            open_command = f'open {" ".join(density_files)} vseries true'
+            self.c(open_command)
+            self.length = len(density_files)
+            
+        self.show_all_timestep()
+        if densities is not None:
+            # after the show_all_timestep function is done, all the models were loaded into the cache, and we can delete the temporary files
+            shutil.rmtree(self.save_path)
+    
+    def show_all_timestep(self):
+        indexes = [f"#{self.index}.{i}" for i in range(1, self.length + 1)]
+        command = f"volume {' '.join(indexes)} show"
+        self.c(command)
+        command = f"volume {' '.join(indexes)} hide"
+        self.c(command)
+        self.set_frame(0)
+    
+    def set_frame(self, frame_index: int):
+       command = f"vseries play #{self.index} jumpTo {frame_index}"
+       self.c(command)
+    
+    def play_section(self, start=1,end=-1, pause_frames=10):
+        if end < 0:
+            end = end + 1 + self.length
+        command = f"vseries play #{self.index} range {start},{end}"
+        if pause_frames is not None and pause_frames > 0:
+            command = command + f" pauseFrames {pause_frames}"
+        return self.c(command)
+    
+    def __len__(self):
+        return self.length
