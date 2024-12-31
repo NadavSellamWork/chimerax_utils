@@ -128,7 +128,7 @@ class ChimeraCommandManager:
         proteins_morph = DensityMapSeries(self, index, densities,density_files)
         return proteins_morph
     
-    def load_time_series_folder(self, folder_path, align_proteins_to=None):
+    def load_time_series_folder(self, folder_path, align_proteins_to=None, step_size=1):
         """
             this function will accept the path of a folder which contains a time series
             this folder will have subfolders which are ordered in the frame order
@@ -181,6 +181,7 @@ class ChimeraCommandManager:
             return int("".join(char for char in os.path.basename(name) if char.isnumeric()))
         subfolders = sorted(os.listdir(folder_path), key=numeric_key_function)
         subfolders = [os.path.join(folder_path, sub_folder) for sub_folder in subfolders]
+        subfolders = subfolders[::step_size]
         folder_files = set(os.listdir(subfolders[0]))
         for sub_folder in subfolders[1:]:
             if not set(os.listdir(sub_folder)) == folder_files:
@@ -212,7 +213,8 @@ class ChimeraCommandManager:
                 density_series = self.create_density_series(density_files=trajectory)
                 density_series.transparency(0.5)
                 density_trajectories.append(density_series)
-        protein_to_align_to.hide()
+        if align_proteins_to is not None:
+            protein_to_align_to.hide()
 
         def play_scene_function(start=1,end=-1, pause_frames=10):
             with self.command_dump():
@@ -356,6 +358,12 @@ class ProteinStructureMorph(Protein):
     
     def __len__(self):
         return self.length
+    
+    def __getitem__(self, sub_index):
+        assert isinstance(sub_index, int) and 1 <= sub_index <= self.length
+        index = f"{self.index}.{sub_index}"
+        protein = Protein(self.c, index)
+        return protein
 
 class DensityMapSeries(Density):
     def __init__(self, c:ChimeraCommandManager, index: int, densities: Optional[List[Density]],density_files:Optional[List[str]]):
@@ -406,3 +414,9 @@ class DensityMapSeries(Density):
     
     def __len__(self):
         return self.length
+    
+    def __getitem__(self, sub_index):
+        assert isinstance(sub_index, int) and 1 <= sub_index <= self.length
+        index = f"{self.index}.{sub_index}"
+        density = Density(self.c, index)
+        return density
