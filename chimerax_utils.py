@@ -336,6 +336,19 @@ class Density(ChimeraObject):
         new_density.level_set(level_set)
         return new_density
 
+    def carve_density_around_protein(self, protein, padding=1.0):
+        """
+        Take protein structure object and carve density around it with a specific padding
+        This avoids density to be around the edge
+        """
+        command = f"vop cover #{self.index} atom #{protein.index} pad {padding}"
+        self.c(command)
+        new_density = Density(self.c, self.c.get_index())
+        return new_density
+
+    def save_density(self, path):
+        command = f"save {path} models #{self.index}"
+        self.c(command)
 
 class ProteinStructureMorph(Protein):
     def __init__(self, c:ChimeraCommandManager, index: int, proteins: List[Protein]):
