@@ -135,6 +135,8 @@ class ChimeraCommandManager:
             each subfolder will contains the same filenames 
             each subfolder will represent a state, made from atomic models and density maps
 
+            align_proteins_to: a str or a protein object
+
             returns:
                 - protein_series_objects - a list of protein_series objects
                 - protein_series_names - a list of the same length, with the corepsonding files names of the protein series (from which files the protein series were created)
@@ -196,7 +198,10 @@ class ChimeraCommandManager:
         density_trajectory_names = []
         
         if align_proteins_to is not None:
-            protein_to_align_to = self.load_protein(align_proteins_to)
+            if isinstance(align_proteins_to, str):
+                protein_to_align_to = self.load_protein(align_proteins_to)
+            else:
+                protein_to_align_to = align_proteins_to
 
         for file in folder_files:
             trajectory = trajectory_files[file]
