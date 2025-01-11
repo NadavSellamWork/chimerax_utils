@@ -306,6 +306,20 @@ class Protein(ChimeraObject):
         output = self.c(f"info #{self.index}")["json values"][0]
         d = json.loads(output)[0]
         return d["num atoms"]
+    
+    def color_residues(self, colors):
+        output = self.c(f"info #{self.index}")["json values"][0]
+        d = json.loads(output)[0]
+        assert d["num residues"] == len(colors)
+        
+        with self.c.command_dump():
+            for i, c in enumerate(colors):
+                red = int(255 * (1 - c))
+                blue = int(255 * c)
+                green = 0
+                command = f"color #{self.index}:{i+1} #{red:02X}{green:02X}{blue:02X}"
+                self.c(command)
+        
 
 class Density(ChimeraObject):    
     def hide(self):
